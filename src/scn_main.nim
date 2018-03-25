@@ -15,7 +15,7 @@
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# LIABILITY, WHETHER IN AN gTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
@@ -41,7 +41,8 @@ import
 type
   ScnMain* = ref object of Scene
     crash, status, inputLabel, inputText, pause: Entity
-    ship: Ship
+    ship1: Ship
+    ship2: Ship
     cooldown: float # shooting cooldown (in seconds)
 
 
@@ -121,13 +122,19 @@ proc init*(scn: ScnMain) =
 
 
   # ship
-  scn.ship = newShip()
+  scn.ship1 = newShip(joystick = 0)
+  scn.ship2 = newShip(joystick = 1)
+
+  # initialize joysticks/gamepads
+  for i in 0 ..< numJoysticks():
+    discard openJoystick(i)
 
   # add to scene
   scn.add(info)
   scn.add(scn.pause)
   scn.add(scn.status)
-  scn.add(scn.ship)
+  scn.add(scn.ship1)
+  scn.add(scn.ship2)
 
 
 proc newScnMain*(): ScnMain =
@@ -185,7 +192,7 @@ method event*(scn: ScnMain, event: Event) =
 method show*(scn: ScnMain) =
   scn.cooldown = Cooldown
   score = 0
-  lives = 4
+  lives = 8
   justDied = false
   explosions = @[]
   hiscoreIdx = -1
@@ -207,8 +214,10 @@ method update*(scn: ScnMain, elapsed: float) =
       discard scn.del(scn.inputLabel)
       discard scn.del(scn.inputText)
       game.scene = titleScene
-      scn.ship.reset()
-      scn.add(scn.ship)
+      scn.ship1.reset()
+      scn.ship2.reset()
+      scn.add(scn.ship1)
+      scn.add(scn.ship2)
     return
 
   # Shooting cooldown
@@ -248,7 +257,7 @@ method update*(scn: ScnMain, elapsed: float) =
     # Crash
     scn.crash.dead = false
     scn.add(scn.crash)
-    scn.crash.pos = scn.ship.pos
+    scn.crash.pos = scn.ship1.pos # ALEX
     scn.crash.play("crash", 1, kill = true)
 
   # Respawn cooldown
@@ -258,35 +267,37 @@ method update*(scn: ScnMain, elapsed: float) =
       respawnCooldown = 0
 
   # Ship is dead
-  if scn.ship.dead:
-    if lives > 0:
-      # Respawn
-      if MouseButton.left.down and respawnCooldown <= 0:
-        dec lives
-        scn.ship.dead = false
-        scn.ship.reset()
-        scn.cooldown = Cooldown
-        scn.add(scn.ship)
-    # No more lives left
+  for ship in @[scn.ship1, scn.ship2]:
+    if ship.dead:
+      if lives > 0:
+        # Respawn
+        if joyDown(ship.joystick, 2) and respawnCooldown <= 0:
+          dec lives
+          ship.dead = false
+          ship.reset()
+          scn.cooldown = Cooldown
+          scn.add(ship)
+      # No more lives left
+      else:
+        hiscoreIdx = checkForHiscore(uint(score))
+        if hiscoreIdx >= 0:
+          scn.add(scn.inputLabel)
+          scn.add(scn.inputText)
+          TextField(scn.inputText.graphic).activate()
+          return
+
+        game.scene = titleScene
+
+    # Ship is alive
     else:
-      hiscoreIdx = checkForHiscore(uint(score))
-      if hiscoreIdx >= 0:
-        scn.add(scn.inputLabel)
-        scn.add(scn.inputText)
-        TextField(scn.inputText.graphic).activate()
-        return
-
-      game.scene = titleScene
-
-  # Ship is alive
-  else:
-    # Shooting
-    if MouseButton.left.down and scn.cooldown == 0:
-      let shot = newShot(scn.ship.pos, scn.ship.rot)
-      scn.add(shot)
-      scn.cooldown = Cooldown
-      discard sfxData["shot"].play()
-
+      # Shooting
+      if scn.cooldown == 0:
+        for id, ship in @[scn.ship1, scn.ship2]:
+          if joyDown(id, 3):
+            let shot = newShot(ship.pos, ship.rot)
+            scn.add(shot)
+            scn.cooldown = 0.1 #Cooldown in secs
+            discard sfxData["shot"].play()
 
   # Update status
   TextGraphic(scn.status.graphic).lines = [

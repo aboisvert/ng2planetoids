@@ -90,6 +90,10 @@ method event*(scn: ScnTitle, event: Event) =
         game.scene = mainScene
   elif event.kind == MouseButtonDown:
     game.scene = mainScene
+  for id in 0..<numJoysticks():
+    if joyDown(id, 2):
+      game.scene = mainScene
+
 
 
 proc newScnTitle*(): ScnTitle =

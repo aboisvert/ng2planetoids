@@ -32,12 +32,14 @@ import
     texturegraphic,
     types,
     utils],
-  data
+  data,
+  random
 
 
 type
   Ship* = ref object of Entity
     engines: bool # engines activity flag
+    joystick*: int
 
 
 const
@@ -49,14 +51,14 @@ const
 
 proc reset*(ship: Ship) =
   # reset ship's position to the center of the screen
-  ship.pos.x = game.size.w / 2
-  ship.pos.y = game.size.h / 2
+  ship.pos.x = (game.size.w / 2) + random(game.size.w / 4) - game.size.w / 4
+  ship.pos.y = (game.size.h / 2) + random(game.size.h / 4) - game.size.h / 4
   ship.vel = (0.0, 0.0)
   ship.acc = (0.0, 0.0)
   ship.dead = false
 
 
-proc init*(ship: Ship) =
+proc init*(ship: Ship, joystick: int) =
   ship.initEntity()
   ship.tags.add("ship")
   ship.graphic = gfxData["ship"]
@@ -66,12 +68,13 @@ proc init*(ship: Ship) =
   ship.collider = ship.newPolyCollider(
     (0.0, 0.0), [(0.0, -7.0), (7.0, 7.0), (-7.0, 7.0)])
   ship.collider.tags.add("rock") # check collisions "ship - rock" only
+  ship.joystick = joystick
   ship.reset()
 
 
-proc newShip*(): Ship =
+proc newShip*(joystick: int): Ship =
   new result
-  result.init()
+  result.init(joystick)
 
 
 method render*(ship: Ship) =
@@ -88,14 +91,15 @@ method render*(ship: Ship) =
 method update*(ship: Ship, elapsed: float) =
   ship.updateEntity(elapsed)
 
-  # rotation
-  ship.rot = direction(ship.pos, mouse.abs / game.scale)
+  var accelerate = false
+  if joyDown(ship.joystick, 4): ship.rot -= 4
+  if joyDown(ship.joystick, 5): ship.rot += 4
+  if joyDown(ship.joystick, 2):
+      ship.acc = rotate(Acceleration, ship.rot)
+      ship.engines = true
+      accelerate = true
 
-  # acceleration
-  if MouseButton.right.down:
-    ship.acc = rotate(Acceleration, ship.rot)
-    ship.engines = true
-  else:
+  if not accelerate:
     ship.engines = false
     ship.acc = (0.0, 0.0)
 
